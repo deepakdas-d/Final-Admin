@@ -1,3 +1,5 @@
+// ignore_for_file: unnecessary_null_comparison
+
 import 'dart:developer';
 
 import 'package:admin/Controller/usercontroller.dart';
@@ -35,6 +37,13 @@ class _IndividualUserDetailsState extends State<IndividualUserDetails> {
   final _formKey = GlobalKey<FormState>();
   final _controller = Get.put(AddUserController());
   final picker = ImagePicker();
+
+  bool isLoading = true;
+  int totalOrders = 0;
+  int pending = 0;
+  int outForDelivery = 0;
+  int inProgress = 0;
+  int accepted = 0;
 
   // Define the custom icon color
   static const Color _iconColor = Color.fromARGB(255, 209, 52, 67);
@@ -76,6 +85,7 @@ class _IndividualUserDetailsState extends State<IndividualUserDetails> {
     super.initState();
     _initializeData();
     _fetchLocationData();
+    fetchUserCounts();
   }
 
   void _initializeData() {
@@ -437,7 +447,9 @@ class _IndividualUserDetailsState extends State<IndividualUserDetails> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildProfileSection(),
+            isLoading
+                ? Center(child: CircularProgressIndicator())
+                : _buildProfileSection(),
             const SizedBox(height: 24),
             _buildInfoCard('Personal Information', Icons.person, [
               _buildTextField(
@@ -497,8 +509,13 @@ class _IndividualUserDetailsState extends State<IndividualUserDetails> {
             const SizedBox(height: 24),
             if (widget.userData['role'] != 'maker') ...[
               const SizedBox(height: 24),
-              _buildCountCard(),
+              _buildCountCardofSales(),
             ],
+            if (widget.userData['role'] != 'salesperson') ...[
+              const SizedBox(height: 24),
+              _buildCountCardOfMaker(),
+            ],
+
             if (widget.userData['role'] != 'maker') ...[
               const SizedBox(height: 24),
               _buildLocationCard(),
@@ -850,7 +867,108 @@ class _IndividualUserDetailsState extends State<IndividualUserDetails> {
     );
   }
 
-  Widget _buildCountCard() {
+  Future<void> fetchUserCounts() async {
+    try {
+      setState(() => isLoading = true);
+
+      // 🔹 Step 1: Fetch from users collection
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.userId)
+          .get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data() ?? {};
+        totalOrders = data['totalOrders'] ?? 0;
+      }
+
+      // 🔹 Step 2: Fetch from Orders collection
+      final ordersSnapshot = await FirebaseFirestore.instance
+          .collection('Orders')
+          .where('cancel', isEqualTo: false)
+          .where('makerId', isEqualTo: widget.userId)
+          .get();
+
+      int p = 0, o = 0, i = 0, a = 0;
+      for (var order in ordersSnapshot.docs) {
+        final status = order['order_status'];
+        switch (status) {
+          case 'pending':
+            p++;
+            break;
+          case 'sent out for delivery':
+            o++;
+            break;
+          case 'delivered':
+            i++;
+            break;
+          case 'accepted':
+            a++;
+            break;
+        }
+      }
+
+      setState(() {
+        pending = p;
+        outForDelivery = o;
+        inProgress = i;
+        accepted = a;
+        isLoading = false;
+      });
+    } catch (e) {
+      print("Error fetching user counts: $e");
+      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> resetTotalOrders() async {
+    try {
+      final ordersRef = FirebaseFirestore.instance.collection('Orders');
+      final userRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.userId);
+
+      // Step 1: Get all active (not cancelled) orders for this maker
+      final ordersSnapshot = await ordersRef
+          .where('makerId', isEqualTo: widget.userId)
+          .where('cancel', isEqualTo: false)
+          .get();
+
+      int pendingCount = 0;
+
+      // Step 2: Count only pending orders
+      for (var orderDoc in ordersSnapshot.docs) {
+        final status = orderDoc['order_status'] ?? '';
+        if (status == 'pending') {
+          pendingCount++;
+        }
+      }
+
+      // Step 3: Reset maker's counters
+      await userRef.set({
+        'totalOrders': pendingCount,
+        'pendingOrders': pendingCount,
+        'acceptedOrders': 0,
+        'sent out for deliveryOrders': 0,
+        'deliveredOrders': 0,
+      }, SetOptions(merge: true));
+
+      // Step 4: Notify user
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Order counters reset for ${widget.userId}")),
+      );
+
+      // Step 5: Refresh UI counts
+      fetchUserCounts();
+    } catch (e) {
+      print("Error resetting order counts: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to reset order counts")),
+      );
+    }
+  }
+
+  Widget _buildCountCardofSales() {
     final userId = widget.userId;
 
     log("Building count card for userId: $userId");
@@ -956,31 +1074,46 @@ class _IndividualUserDetailsState extends State<IndividualUserDetails> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        onPressed: () async {
-                          try {
-                            await FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(userId)
-                                .update({
-                                  'totalLeads': 0,
-                                  'totalOrders': 0,
-                                  'totalPostSaleFollowUp': 0,
-                                });
+                        onPressed: () {
+                          Get.defaultDialog(
+                            title: "Confirm Reset",
+                            middleText:
+                                "Are you sure you want to reset all counts to zero?",
+                            textCancel: "Cancel",
+                            textConfirm: "Yes, Reset",
+                            confirmTextColor: Colors.white,
+                            buttonColor: Colors.red,
+                            onConfirm: () async {
+                              Get.back(); // close dialog
+                              try {
+                                await FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(userId)
+                                    .update({
+                                      'totalLeads': 0,
+                                      'totalOrders': 0,
+                                      'totalPostSaleFollowUp': 0,
+                                    });
 
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("Counts reset to zero."),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text("Error: $e"),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
+                                Get.snackbar(
+                                  "Success",
+                                  "Counts reset to zero.",
+                                  snackPosition: SnackPosition.BOTTOM,
+                                  backgroundColor: Colors.green,
+                                  colorText: Colors.white,
+                                  duration: const Duration(seconds: 2),
+                                );
+                              } catch (e) {
+                                Get.snackbar(
+                                  "Error",
+                                  "Failed to reset counts: $e",
+                                  snackPosition: SnackPosition.BOTTOM,
+                                  backgroundColor: Colors.red,
+                                  colorText: Colors.white,
+                                );
+                              }
+                            },
+                          );
                         },
                         icon: const Icon(Icons.refresh),
                         label: const Text("Reset Counts"),
@@ -994,6 +1127,151 @@ class _IndividualUserDetailsState extends State<IndividualUserDetails> {
           ],
         ),
       ),
+    );
+  }
+
+  //maker counter
+  Widget _buildCountCardOfMaker() {
+    final userId = widget.userId;
+
+    log("Building Maker count card for userId: $userId");
+
+    return Card(
+      margin: EdgeInsets.zero,
+      color: Colors.white,
+      elevation: 0.5,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(
+                  Icons.production_quantity_limits,
+                  color: Colors.deepPurple,
+                ),
+                SizedBox(width: 10),
+                Text(
+                  'Maker Dashboard',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const Divider(height: 24, thickness: 0.5),
+
+            // 🔹 Listen to Firestore changes
+            if (userId != null)
+              StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(userId)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (!snapshot.hasData || !snapshot.data!.exists) {
+                    return const Text("No data found");
+                  }
+
+                  final data = snapshot.data!.data() as Map<String, dynamic>;
+                  final totalOrders = data['totalOrders'] ?? 0;
+                  final pending = data['pendingOrders'] ?? 0;
+                  final outForDelivery =
+                      data['sent out for deliveryOrders'] ?? 0;
+                  final delivered = data['deliveredOrders'] ?? 0;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildRow("Total Orders", totalOrders, Colors.green),
+                      const SizedBox(height: 10),
+                      _buildRow("Pending", pending, Colors.orange),
+                      const SizedBox(height: 10),
+
+                      _buildRow(
+                        "Out for Delivery",
+                        outForDelivery,
+                        Colors.purple,
+                      ),
+                      const SizedBox(height: 10),
+                      _buildRow("Delivered", delivered, Colors.teal),
+                      const SizedBox(height: 20),
+
+                      // 🔹 Reset Button
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red[600],
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: () {
+                          Get.defaultDialog(
+                            title: "Confirm Reset",
+                            middleText:
+                                "Are you sure you want to reset all orders to zero?",
+                            textCancel: "Cancel",
+                            textConfirm: "Yes, Reset",
+                            confirmTextColor: Colors.white,
+                            buttonColor: Colors.red,
+                            onConfirm: () async {
+                              Get.back(); // close dialog
+                              try {
+                                await resetTotalOrders();
+
+                                Get.snackbar(
+                                  "Success",
+                                  "Orders reset to zero.",
+                                  snackPosition: SnackPosition.BOTTOM,
+                                  backgroundColor: Colors.green,
+                                  colorText: Colors.white,
+                                  duration: const Duration(seconds: 2),
+                                );
+                              } catch (e) {
+                                Get.snackbar(
+                                  "Error",
+                                  "Failed to reset orders: $e",
+                                  snackPosition: SnackPosition.BOTTOM,
+                                  backgroundColor: Colors.red,
+                                  colorText: Colors.white,
+                                );
+                              }
+                            },
+                          );
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text("Reset Orders"),
+                      ),
+                    ],
+                  );
+                },
+              )
+            else
+              const Text("User not logged in"),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Helper widget for rows
+  Widget _buildRow(String label, int value, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label),
+        Text(
+          value.toString(),
+          style: TextStyle(fontWeight: FontWeight.bold, color: color),
+        ),
+      ],
     );
   }
 

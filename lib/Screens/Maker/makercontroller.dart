@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:get/get.dart';
 
 class MakerManagementController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -48,7 +49,7 @@ class MakerManagementController {
     resetAndFetchUsers();
   }
 
-  void resetAndFetchUsers() {
+  Future<void> resetAndFetchUsers() async {
     lastDocument.value = null;
     users.value = [];
     fetchUsers();
@@ -111,6 +112,111 @@ class MakerManagementController {
       print('Error fetching users: $e');
     } finally {
       isLoadingMore.value = false;
+    }
+  }
+
+  Future<void> resetAllMakersOrders(BuildContext context) async {
+    // 🔹 Show confirmation dialog
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Confirm Reset'),
+          content: const Text(
+            'Are you sure you want to reset all maker order counts?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
+    );
+
+    // 🔹 Exit if user cancels
+    if (confirm != true) {
+      debugPrint("❌ Reset cancelled by user");
+      return;
+    }
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+
+      // 🔹 Get all makers
+      final makersSnapshot = await firestore
+          .collection('users')
+          .where('role', isEqualTo: 'maker')
+          .get();
+
+      if (makersSnapshot.docs.isEmpty) {
+        Get.snackbar(
+          "Info",
+          "No makers found to reset.",
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+        return;
+      }
+
+      for (var makerDoc in makersSnapshot.docs) {
+        final userId = makerDoc.id;
+
+        // Step 1: Get all active (not cancelled) orders for this maker
+        final ordersSnapshot = await firestore
+            .collection('Orders')
+            .where('makerId', isEqualTo: userId)
+            .where('cancel', isEqualTo: false)
+            .get();
+
+        int pendingCount = 0;
+
+        // Step 2: Count only pending orders
+        for (var orderDoc in ordersSnapshot.docs) {
+          final status = orderDoc['order_status'] ?? '';
+          if (status == 'pending') {
+            pendingCount++;
+          }
+        }
+
+        // Step 3: Reset maker's counters
+        await firestore.collection('users').doc(userId).set({
+          'totalOrders': pendingCount,
+          'pendingOrders': pendingCount,
+          'acceptedOrders': 0,
+          'sent out for deliveryOrders': 0,
+          'deliveredOrders': 0,
+        }, SetOptions(merge: true));
+      }
+
+      // Step 4: Notify success
+      Get.snackbar(
+        "Success",
+        "All maker order counts have been reset.",
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+
+      debugPrint("✅ All maker counts reset successfully.");
+    } catch (e) {
+      debugPrint("❌ Error resetting maker counts: $e");
+      Get.snackbar(
+        "Error",
+        "Failed to reset maker counts: $e",
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
     }
   }
 }

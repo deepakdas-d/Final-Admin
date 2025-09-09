@@ -8,7 +8,6 @@ class SalesManagementPage extends StatelessWidget {
 
   const SalesManagementPage({super.key, required this.controller});
   @override
-  @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (controller.users.value.isEmpty) {
@@ -31,30 +30,37 @@ class SalesManagementPage extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 22),
-            onPressed: controller.resetAndFetchUsers,
+            icon: const Icon(Icons.cleaning_services, size: 22),
+            onPressed: () async {
+              await controller.resetAllSalespersonsCounts(context);
+            },
             color: const Color(0xFF666666),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildSearchSection(controller),
-          Expanded(
-            child: ValueListenableBuilder<List<Map<String, dynamic>>>(
-              valueListenable: controller.users,
-              builder: (context, users, _) {
-                final filteredUsers = _getFilteredUsers(users);
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await controller.resetAndFetchUsers();
+        },
+        child: Column(
+          children: [
+            _buildSearchSection(controller),
+            Expanded(
+              child: ValueListenableBuilder<List<Map<String, dynamic>>>(
+                valueListenable: controller.users,
+                builder: (context, users, _) {
+                  final filteredUsers = _getFilteredUsers(users);
 
-                if (filteredUsers.isEmpty) {
-                  return _buildEmptyState();
-                }
+                  if (filteredUsers.isEmpty) {
+                    return _buildEmptyState();
+                  }
 
-                return _buildUserList(context, filteredUsers);
-              },
+                  return _buildUserList(context, filteredUsers);
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(
@@ -156,7 +162,7 @@ class SalesManagementPage extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFD13443) : Colors.transparent, 
+          color: isSelected ? const Color(0xFFD13443) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
@@ -206,6 +212,7 @@ class SalesManagementPage extends StatelessWidget {
   ) {
     return ListView.builder(
       controller: controller.scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       itemCount: users.length + (controller.isLoadingMore.value ? 1 : 0),
       itemBuilder: (context, index) {

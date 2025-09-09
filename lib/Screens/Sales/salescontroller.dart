@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:get/get.dart';
 
 class SalesManagementController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -66,10 +67,10 @@ class SalesManagementController {
     resetAndFetchUsers();
   }
 
-  void resetAndFetchUsers() {
+  Future<void> resetAndFetchUsers() async {
     lastDocument.value = null;
     users.value = [];
-    fetchUsers();
+    await fetchUsers();
   }
 
   Future<void> fetchUsers() async {
@@ -129,6 +130,79 @@ class SalesManagementController {
       print('Error fetching users: $e');
     } finally {
       isLoadingMore.value = false;
+    }
+  }
+
+  Future<void> resetAllSalespersonsCounts(BuildContext context) async {
+    // 🔹 Show confirmation dialog
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Confirm Reset'),
+          content: const Text(
+            'Are you sure you want to reset all salesperson counts?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
+    );
+
+    // 🔹 Proceed only if user confirms
+    if (confirm != true) {
+      debugPrint("❌ Reset cancelled by user");
+      return;
+    }
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+
+      // 🔹 Get only users with role 'salesmen'
+      final usersSnapshot = await firestore
+          .collection('users')
+          .where('role', isEqualTo: 'salesmen')
+          .get();
+
+      // 🔹 Use batch for efficiency
+      WriteBatch batch = firestore.batch();
+
+      for (var doc in usersSnapshot.docs) {
+        batch.update(doc.reference, {
+          'totalLeads': 0,
+          'totalOrders': 0,
+          'totalPostSaleFollowUp': 0,
+        });
+      }
+
+      // 🔹 Commit all updates in one go
+      await batch.commit();
+
+      debugPrint("✅ All salesperson counts reset to zero.");
+      Get.snackbar(
+        "Success",
+        "All salesperson counts reset.",
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+    } catch (e) {
+      debugPrint("❌ Error resetting counts: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error resetting counts: $e"),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 }
