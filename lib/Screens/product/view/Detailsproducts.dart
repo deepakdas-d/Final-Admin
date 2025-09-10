@@ -35,6 +35,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   // Text editing controllers
   final _nameController = TextEditingController();
   final _idController = TextEditingController();
+  final productcount = TextEditingController();
   final _materialsController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _priceController = TextEditingController();
@@ -68,6 +69,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           // Initialize controllers with product data
           _nameController.text = _product!.name;
           _idController.text = _product!.productId;
+          productcount.text = _product!.stock.toString();
           _materialsController.text = _product!.materials;
           _descriptionController.text = _product!.description;
           _priceController.text = _product!.price.toStringAsFixed(
@@ -204,8 +206,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         return SafeArea(
           child: Wrap(
             children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16.0),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16.0),
                 child: Center(
                   child: Text(
                     'Choose Image Source',
@@ -219,7 +221,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.photo_library, color: _accentColor),
-                title: Text(
+                title: const Text(
                   'Photo Library',
                   style: TextStyle(color: _textColor),
                 ),
@@ -230,7 +232,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.photo_camera, color: _accentColor),
-                title: Text('Camera', style: TextStyle(color: _textColor)),
+                title: const Text(
+                  'Camera',
+                  style: TextStyle(color: _textColor),
+                ),
                 onTap: () {
                   _pickImage(ImageSource.camera);
                   Navigator.of(context).pop();
@@ -482,7 +487,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                                         mainAxisAlignment:
                                             MainAxisAlignment.center,
                                         children: [
-                                          Icon(
+                                          const Icon(
                                             Icons.add_a_photo_outlined,
                                             color:
                                                 _accentColor, // Accent color for icon
@@ -523,6 +528,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                           validator: (value) => value == null || value.isEmpty
                               ? 'Please enter an ID'
                               : null,
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildReadOnlyField(
+                          controller: productcount,
+                          label: 'Product NOS',
+                          icon: Icons.inventory,
                         ),
                         const SizedBox(height: 16),
                         _buildTextField(
@@ -687,6 +699,46 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       autovalidateMode:
           AutovalidateMode.onUserInteraction, // Validate as the user types
       cursorColor: _accentColor, // Accent color for cursor
+    );
+  }
+
+  Widget _buildReadOnlyField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+  }) {
+    return TextFormField(
+      controller: controller,
+      readOnly: true, // 🔹 Makes it uneditable
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: Colors.grey[700],
+        ),
+        prefixIcon: Icon(icon, color: _accentColor),
+        filled: true,
+        fillColor: Colors.grey[100], // Slightly darker to indicate read-only
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          vertical: 14,
+          horizontal: 16,
+        ),
+      ),
+      style: const TextStyle(
+        color: Colors.black87, // Normal text color
+        fontWeight: FontWeight.w500,
+      ),
+      cursorColor: _accentColor,
     );
   }
 }

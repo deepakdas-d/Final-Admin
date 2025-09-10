@@ -8,6 +8,7 @@ class Product {
   final String description;
   final double price;
   final String imageUrl;
+  final int stock;
 
   Product({
     required this.id,
@@ -17,6 +18,7 @@ class Product {
     required this.description,
     required this.price,
     required this.imageUrl,
+    required this.stock,
   });
 
   // Factory constructor to create a Product instance from a Firestore document
@@ -30,6 +32,7 @@ class Product {
       description: data['description'] ?? 'No Description',
       price: (data['price'] ?? 0.0).toDouble(),
       imageUrl: data['imageUrl'] ?? '',
+      stock: (data['stock']) ?? 0,
     );
   }
 
