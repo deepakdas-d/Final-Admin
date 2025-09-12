@@ -53,7 +53,7 @@ class _ProductAddPageState extends State<ProductAddPage> {
         source: source,
         maxWidth: 800,
         maxHeight: 800,
-        imageQuality: 85,
+        imageQuality: 70,
       );
 
       if (pickedImage == null) {
