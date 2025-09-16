@@ -511,7 +511,7 @@ class _IndividualUserDetailsState extends State<IndividualUserDetails> {
               const SizedBox(height: 24),
               _buildCountCardofSales(),
             ],
-            if (widget.userData['role'] != 'salesperson') ...[
+            if (widget.userData['role'] != 'salesmen') ...[
               const SizedBox(height: 24),
               _buildCountCardOfMaker(),
             ],
