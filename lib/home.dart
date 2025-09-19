@@ -1,5 +1,6 @@
 import 'package:admin/Auth/sigin.dart';
 import 'package:admin/Controller/home_controller.dart';
+import 'package:admin/Lost_Report/Lost_Report_list.dart';
 import 'package:admin/Screens/Complaint/ComplaintPage.dart';
 import 'package:admin/Screens/LeadReport/LeadReportPage.dart';
 import 'package:admin/Screens/Maker/MakerManagementPage.dart';
@@ -653,6 +654,17 @@ class Dashboard extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => Postsalefollowup()),
+          );
+        },
+      ),
+      DashboardItem(
+        'Lost Lead Report',
+        Icons.report_gmailerrorred_outlined,
+        const Color(0xFFEF4444),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => LostReportList()),
           );
         },
       ),

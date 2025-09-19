@@ -99,7 +99,7 @@ class LeadReportController extends GetxController {
     try {
       final userSnapshot = await _firestore
           .collection('users')
-          .where('role', isEqualTo: 'salesmen') // <-- FIXED here
+          .where('role', isEqualTo: 'salesmen')
           .get();
 
       final Set<String> salespeople = userSnapshot.docs
@@ -120,30 +120,19 @@ class LeadReportController extends GetxController {
     }
   }
 
-  void extractAvailableSalespeople() {
-    final Set<String> salespeople = {};
-
-    for (var lead in allLeads) {
-      final salesperson = lead['salesman']
-          ?.toString()
-          .trim(); // <-- Match your Firestore key exactly!
-      if (salesperson != null && salesperson.isNotEmpty) {
-        salespeople.add(salesperson);
-      }
-    }
-
-    availableSalespeople.assignAll(salespeople.toList());
-  }
-
   Future<void> fetchLeads({bool isRefresh = false}) async {
     try {
       if (isRefresh) {
         _lastDocument = null;
         allLeads.clear();
+        filteredLeads.clear();
+        paginatedLeads.clear();
         hasMoreData.value = true;
+        isDataLoaded.value = false;
       }
 
       isLoading.value = true;
+
       Query<Map<String, dynamic>> query = _firestore
           .collection('Leads')
           .orderBy('createdAt', descending: true)
@@ -157,15 +146,16 @@ class LeadReportController extends GetxController {
 
       if (leadSnapshot.docs.isEmpty) {
         hasMoreData.value = false;
+        isLoading.value = false;
+        isDataLoaded.value = true;
         return;
       }
 
       List<Map<String, dynamic>> tempLeads = [];
       Set<String> placesSet = {};
-      Set<String> salespeopleSet = {};
       Set<String> salesmanIDs = {};
 
-      // 1. Collect all salesmanIDs
+      // Collect all salesmanIDs
       for (var doc in leadSnapshot.docs) {
         final salesmanID = doc.data()['salesmanID'];
         if (salesmanID != null && salesmanID.toString().isNotEmpty) {
@@ -173,7 +163,7 @@ class LeadReportController extends GetxController {
         }
       }
 
-      // 2. Fetch all salesman names in batch
+      // Fetch all salesman names in batch
       Map<String, String> salesmanIdToName = {};
       if (salesmanIDs.isNotEmpty) {
         final userDocs = await _firestore
@@ -187,7 +177,7 @@ class LeadReportController extends GetxController {
         }
       }
 
-      // 3. Process leads
+      // Process leads
       for (var doc in leadSnapshot.docs) {
         final data = doc.data();
         final salesmanID = data['salesmanID'];
@@ -217,25 +207,14 @@ class LeadReportController extends GetxController {
         if (place != null && place.isNotEmpty) {
           placesSet.add(place);
         }
-
-        // if (salesmanName.isNotEmpty && salesmanName != 'N/A') {
-        //   salespeopleSet.add(salesmanName);
-        // }
-        if (salesmanName.isNotEmpty &&
-            salesmanName != 'N/A' &&
-            salesmanName != 'Unknown' &&
-            salesmanName != 'Not Found' &&
-            salesmanName != 'Error') {
-          salespeopleSet.add(salesmanName);
-        }
       }
 
       _lastDocument = leadSnapshot.docs.last;
       allLeads.addAll(tempLeads);
-
       availablePlaces.value = placesSet.toList()..sort();
 
-      filterLeads();
+      // Update filteredLeads and paginatedLeads only after all data is processed
+      await filterLeads();
       isDataLoaded.value = true;
     } catch (e) {
       Get.snackbar(
@@ -246,6 +225,8 @@ class LeadReportController extends GetxController {
         colorText: Colors.white,
       );
     } finally {
+      // Ensure minimum shimmer duration for better UX
+      await Future.delayed(const Duration(milliseconds: 500));
       isLoading.value = false;
     }
   }
@@ -264,7 +245,9 @@ class LeadReportController extends GetxController {
   Future<void> filterLeads() async {
     try {
       isLoading.value = true;
-      allLeads.clear(); // Optional: Only if you want to reset results
+      filteredLeads.clear();
+      paginatedLeads.clear();
+
       Query<Map<String, dynamic>> query = _firestore.collection('Leads');
 
       // Apply Firestore-supported filters
@@ -278,7 +261,6 @@ class LeadReportController extends GetxController {
 
       if (salespersonFilter.value.isNotEmpty &&
           salespersonFilter.value != 'All') {
-        // Note: Only works if `salesmanID` is stored in leads
         final salesmen = await _firestore
             .collection('users')
             .where('name', isEqualTo: salespersonFilter.value)
@@ -288,8 +270,9 @@ class LeadReportController extends GetxController {
           final id = salesmen.docs.first.id;
           query = query.where('salesmanID', isEqualTo: id);
         } else {
-          allLeads.clear();
           filteredLeads.clear();
+          paginatedLeads.clear();
+          isLoading.value = false;
           return;
         }
       }
@@ -337,23 +320,22 @@ class LeadReportController extends GetxController {
         tempLeads.add(lead);
       }
 
-      allLeads.assignAll(tempLeads);
+      filteredLeads.assignAll(tempLeads);
 
       // Apply client-side search filter (if needed)
       if (searchQuery.value.isNotEmpty) {
         final query = searchQuery.value.toLowerCase();
-        filteredLeads.value = allLeads.where((lead) {
+        filteredLeads.value = filteredLeads.where((lead) {
           return lead['name'].toString().toLowerCase().contains(query) ||
               lead['leadId'].toString().toLowerCase().contains(query) ||
               lead['phone1'].toString().toLowerCase().contains(query) ||
               lead['salesman'].toString().toLowerCase().contains(query) ||
               lead['place'].toString().toLowerCase().contains(query);
         }).toList();
-      } else {
-        filteredLeads.assignAll(allLeads);
       }
 
-      paginatedLeads.assignAll(filteredLeads);
+      // Update paginatedLeads only after filtering is complete
+      paginatedLeads.assignAll(filteredLeads.take(itemsPerPage).toList());
     } catch (e) {
       Get.snackbar(
         'Error',
@@ -363,55 +345,53 @@ class LeadReportController extends GetxController {
         colorText: Colors.white,
       );
     } finally {
+      // Ensure minimum shimmer duration for better UX
+      await Future.delayed(const Duration(milliseconds: 500));
       isLoading.value = false;
     }
   }
 
-  void setLeadSourceFilter(String? value) {
-    // leadSourceFilter.value = value ?? '';
-  }
   void setStatusFilter(String? status) {
     statusFilter.value = status ?? '';
-    filterLeads();
+    fetchLeads(isRefresh: true);
   }
 
   void setPlaceFilter(String? place) {
     placeFilter.value = place ?? '';
-    filterLeads();
+    fetchLeads(isRefresh: true);
   }
 
   void setSalespersonFilter(String? salesperson) {
     salespersonFilter.value = salesperson ?? '';
-    filterLeads();
+    fetchLeads(isRefresh: true);
   }
 
   void setDateRange(DateTimeRange? range) {
     startDate.value = range?.start;
     endDate.value = range?.end;
-    filterLeads();
+    fetchLeads(isRefresh: true);
   }
 
   void clearFilters() {
-    // leadSourceFilter.value = 'All';
     statusFilter.value = '';
     placeFilter.value = '';
     salespersonFilter.value = '';
     startDate.value = null;
     endDate.value = null;
     searchQuery.value = '';
-    filterLeads();
+    searchController.clear();
+    fetchLeads(isRefresh: true);
   }
 
+  // Rest of the methods (unchanged)
   Future<List<Map<String, dynamic>>> _getFilteredLeadsDataForReport() async {
     try {
       Query<Map<String, dynamic>> query = _firestore
           .collection('Leads')
           .orderBy('createdAt', descending: true);
 
-      // Apply filters
       if (salespersonFilter.value.isNotEmpty &&
           salespersonFilter.value != 'All') {
-        // Fetch user IDs for the selected salesman name
         final userSnapshot = await _firestore
             .collection('users')
             .where('name', isEqualTo: salespersonFilter.value)
@@ -420,7 +400,7 @@ class LeadReportController extends GetxController {
           final userId = userSnapshot.docs.first.id;
           query = query.where('salesmanID', isEqualTo: userId);
         } else {
-          return []; // No matching salesman found
+          return [];
         }
       }
 
@@ -457,7 +437,6 @@ class LeadReportController extends GetxController {
         final String? salesmanID = data['salesmanID'];
         final String salesmanName = await getSalesmanName(salesmanID);
 
-        // Apply search query filter on the client side
         final String clientSearchQuery = searchQuery.value.toLowerCase();
         final String name = data['name']?.toString().toLowerCase() ?? '';
         final String leadId = data['leadId']?.toString().toLowerCase() ?? '';
@@ -543,8 +522,6 @@ class LeadReportController extends GetxController {
     return false;
   }
 
-  /// Generates an Excel file containing all lead data (based on current filters).
-  /// Generates an Excel file containing all lead data (based on current filters).
   Future<File> _generateLeadsExcelFile(
     List<Map<String, dynamic>> leadsData,
   ) async {
@@ -552,20 +529,20 @@ class LeadReportController extends GetxController {
     final Sheet sheet = excel['All Leads Data'];
 
     // Set column widths
-    sheet.setColumnWidth(0, 25); // Lead ID
-    sheet.setColumnWidth(1, 25); // Name
-    sheet.setColumnWidth(2, 20); // Phone1
-    sheet.setColumnWidth(3, 20); // Phone2
-    sheet.setColumnWidth(4, 30); // Address
-    sheet.setColumnWidth(5, 15); // Place
-    sheet.setColumnWidth(6, 20); // Salesman
-    sheet.setColumnWidth(7, 15); // Status
-    sheet.setColumnWidth(8, 20); // Created At
-    sheet.setColumnWidth(9, 20); // Follow Up Date
-    sheet.setColumnWidth(10, 40); // Remark
-    sheet.setColumnWidth(11, 20); // Product ID
-    sheet.setColumnWidth(12, 20); // NOS
-    sheet.setColumnWidth(13, 20); // Customer ID
+    sheet.setColumnWidth(0, 25);
+    sheet.setColumnWidth(1, 25);
+    sheet.setColumnWidth(2, 20);
+    sheet.setColumnWidth(3, 20);
+    sheet.setColumnWidth(4, 30);
+    sheet.setColumnWidth(5, 15);
+    sheet.setColumnWidth(6, 20);
+    sheet.setColumnWidth(7, 15);
+    sheet.setColumnWidth(8, 20);
+    sheet.setColumnWidth(9, 20);
+    sheet.setColumnWidth(10, 40);
+    sheet.setColumnWidth(11, 20);
+    sheet.setColumnWidth(12, 20);
+    sheet.setColumnWidth(13, 20);
 
     // Add filter description
     final filterDescription = [
@@ -725,32 +702,28 @@ class LeadReportController extends GetxController {
     return file;
   }
 
-  /// Downloads data for a single salesman as a PDF
   Future<void> downloadSingleSalesmanAsPDF(
     BuildContext context,
     String salesmanName,
   ) async {
     if (isExporting.value) return;
 
-    salespersonFilter.value = salesmanName; // Set the filter for the salesman
+    salespersonFilter.value = salesmanName;
     await downloadAllLeadsDataAsPDF(context);
-    salespersonFilter.value = ''; // Reset the filter after download
+    salespersonFilter.value = '';
   }
 
-  /// Downloads data for a single salesman as an Excel file
   Future<void> downloadSingleSalesmanAsExcel(
     BuildContext context,
     String salesmanName,
   ) async {
     if (isExporting.value) return;
 
-    salespersonFilter.value = salesmanName; // Set the filter for the salesman
+    salespersonFilter.value = salesmanName;
     await downloadAllLeadsDataAsExcel(context);
-    salespersonFilter.value = ''; // Reset the filter after download
+    salespersonFilter.value = '';
   }
 
-  /// Downloads all lead data as a PDF document (based on current filters).
-  /// Downloads all lead data as a PDF document (based on current filters).
   Future<void> downloadAllLeadsDataAsPDF(BuildContext context) async {
     if (isExporting.value) return;
 
@@ -793,7 +766,6 @@ class LeadReportController extends GetxController {
       final pdf = pw.Document();
       final dateFormat = DateFormat('dd-MMM-yyyy HH:mm');
 
-      // Build filter description
       final filterDescription = [
         if (salespersonFilter.value.isNotEmpty &&
             salespersonFilter.value != 'All')
@@ -940,7 +912,6 @@ class LeadReportController extends GetxController {
     }
   }
 
-  /// Shares all lead data as a PDF file (based on current filters).
   Future<void> shareAllLeadsDataAsPDF(BuildContext context) async {
     if (isExporting.value) return;
 
@@ -1042,18 +1013,17 @@ class LeadReportController extends GetxController {
                 cellAlignment: pw.Alignment.centerLeft,
                 cellPadding: const pw.EdgeInsets.all(5),
                 cellStyle: pw.TextStyle(fontSize: 9),
-                cellHeight: 30, // Fixed height for cells to ensure readability
+                cellHeight: 30,
                 columnWidths: {
-                  0: const pw.FlexColumnWidth(1.5), // Lead ID
-                  1: const pw.FlexColumnWidth(2.5), // Name
-                  2: const pw.FlexColumnWidth(1.5), // Phone1
-                  3: const pw.FlexColumnWidth(1.5), // Phone2
-                  4: const pw.FlexColumnWidth(2), // Place
-                  5: const pw.FlexColumnWidth(2), // Salesman
-                  6: const pw.FlexColumnWidth(1.2), // Status
-                  7: const pw.FlexColumnWidth(2), // Created At
+                  0: const pw.FlexColumnWidth(1.5),
+                  1: const pw.FlexColumnWidth(2.5),
+                  2: const pw.FlexColumnWidth(1.5),
+                  3: const pw.FlexColumnWidth(1.5),
+                  4: const pw.FlexColumnWidth(2),
+                  5: const pw.FlexColumnWidth(2),
+                  6: const pw.FlexColumnWidth(1.2),
+                  7: const pw.FlexColumnWidth(2),
                 },
-                // Enable text wrapping for long content
               ),
               pw.SizedBox(height: 20),
               pw.Text(
@@ -1112,7 +1082,6 @@ class LeadReportController extends GetxController {
     }
   }
 
-  /// Downloads all lead data as an Excel file (based on current filters).
   Future<void> downloadAllLeadsDataAsExcel(BuildContext context) async {
     if (isExporting.value) return;
 
@@ -1183,7 +1152,6 @@ class LeadReportController extends GetxController {
     }
   }
 
-  /// Shares all lead data as an Excel file (based on current filters).
   Future<void> shareAllLeadsDataAsExcel(BuildContext context) async {
     if (isExporting.value) return;
 
@@ -1236,13 +1204,13 @@ class LeadReportController extends GetxController {
             'Lead Data Export - ${DateFormat('dd-MMM-yyyy').format(DateTime.now().toLocal())}',
       );
 
-      // Get.snackbar(
-      //   'Share Initiated',
-      //   'Excel file prepared for sharing.',
-      //   snackPosition: SnackPosition.BOTTOM,
-      //   backgroundColor: Colors.green,
-      //   colorText: Colors.white,
-      // );
+      Get.snackbar(
+        'Share Initiated',
+        'Excel file prepared for sharing.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
     } catch (e) {
       if (context.mounted) Navigator.of(context).pop();
       log('Error sharing Excel: $e');

@@ -241,7 +241,7 @@ class Postsalefollowup extends StatelessWidget {
     final dropdownItems = ['', ...items.where((item) => item != 'All')];
 
     return SizedBox(
-      width: MediaQuery.of(context).size.width * 0.45,
+      width: MediaQuery.of(context).size.width * 0.59,
       height: MediaQuery.of(context).size.height * 0.065,
       child: DropdownButtonFormField<String>(
         value: value?.isEmpty ?? true ? null : value,

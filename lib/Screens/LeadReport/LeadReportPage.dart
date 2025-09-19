@@ -1,5 +1,3 @@
-// ignore_for_file: file_names
-
 import 'package:admin/Screens/LeadReport/individual_lead_report.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -27,7 +25,6 @@ class LeadReport extends StatelessWidget {
     final double cardHeight = screenHeight * (isPortrait ? 0.18 : 0.15);
     final double basePadding = screenWidth * 0.04;
     final double baseFontSize = screenWidth * 0.04 * textScaleFactor;
-    // ignore: unused_local_variable
     final int visibleTiles =
         ((screenHeight - appBarHeight - filterSectionHeight - summaryHeight) /
                 cardHeight)
@@ -465,15 +462,14 @@ class LeadReport extends StatelessWidget {
 
           Expanded(
             child: Obx(() {
-              // 🔄 Show full-screen loader when loading first batch
-              if (controller.isLoading.value &&
-                  controller.paginatedLeads.isEmpty) {
-                return Center(child: CircularProgressIndicator());
+              // 🔄 Show shimmer effect when loading (initial or filter)
+              if (controller.isLoading.value) {
+                return _buildShimmerList(context, visibleTiles, basePadding);
               }
 
               // ❌ No data found
               if (controller.paginatedLeads.isEmpty &&
-                  !controller.isLoading.value) {
+                  !controller.isLoadingMore.value) {
                 return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1008,7 +1004,6 @@ class LeadReport extends StatelessWidget {
     );
   }
 
-  // ignore: unused_element
   Widget _buildShimmerList(
     BuildContext context,
     int visibleTiles,
