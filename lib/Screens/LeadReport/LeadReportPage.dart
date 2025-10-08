@@ -53,475 +53,472 @@ class LeadReport extends StatelessWidget {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Filters Section
-          Container(
-            padding: EdgeInsets.all(basePadding),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 4,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Container(
-                  height: 50 * (isPortrait ? 1.0 : 0.9),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                    color: Colors.grey.shade50,
+      body: RefreshIndicator(
+        onRefresh: () => controller.fetchLeads(isRefresh: true),
+        child: Column(
+          children: [
+            // Filters Section
+            Container(
+              padding: EdgeInsets.all(basePadding),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
                   ),
-                  child: TextField(
-                    controller: controller.searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Name, Lead ID, Phone, Place, or Salesman',
-                      hintStyle: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 14 * textScaleFactor,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: basePadding,
-                        vertical: 12 * textScaleFactor,
-                      ),
-                      prefixIcon: Icon(
-                        Icons.search_rounded,
-                        color: Colors.grey.shade600,
-                        size: 20 * textScaleFactor,
-                      ),
-                      suffixIcon: Obx(
-                        () => controller.searchQuery.value.isNotEmpty
-                            ? IconButton(
-                                icon: Icon(
-                                  Icons.clear_rounded,
-                                  size: 20 * textScaleFactor,
-                                ),
-                                onPressed: () {
-                                  controller.searchQuery.value = '';
-                                  controller.searchController.clear();
-                                },
-                              )
-                            : const SizedBox.shrink(),
-                      ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    height: 50 * (isPortrait ? 1.0 : 0.9),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                      color: Colors.grey.shade50,
                     ),
-                    onChanged: (value) => controller.searchQuery.value = value,
-                    style: TextStyle(fontSize: 14 * textScaleFactor),
+                    child: TextField(
+                      controller: controller.searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Name, Lead ID, Phone, Place, or Salesman',
+                        hintStyle: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 14 * textScaleFactor,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: basePadding,
+                          vertical: 12 * textScaleFactor,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          color: Colors.grey.shade600,
+                          size: 20 * textScaleFactor,
+                        ),
+                        suffixIcon: Obx(
+                          () => controller.searchQuery.value.isNotEmpty
+                              ? IconButton(
+                                  icon: Icon(
+                                    Icons.clear_rounded,
+                                    size: 20 * textScaleFactor,
+                                  ),
+                                  onPressed: () {
+                                    controller.searchController.clear();
+                                    controller.onSearchChanged('');
+                                  },
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ),
+                      onChanged: controller.onSearchChanged,
+                      style: TextStyle(fontSize: 14 * textScaleFactor),
+                    ),
                   ),
-                ),
-                SizedBox(height: basePadding),
-                // Filters Row
-                SizedBox(
-                  height: 35 * (isPortrait ? 1.5 : 0.9),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        // Salesperson Filter
-                        Container(
-                          width: screenWidth * (isPortrait ? 0.55 : 0.3),
-                          margin: EdgeInsets.only(right: basePadding),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade300),
-                            color: Colors.white,
-                          ),
-                          child: Obx(
-                            () => DropdownButtonFormField<String>(
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                hintText: 'All Salesperson',
-                                labelStyle: TextStyle(
-                                  fontSize: 10 * textScaleFactor,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: basePadding,
-                                  vertical: 8 * textScaleFactor,
-                                ),
-                                prefixIcon: Icon(
-                                  Icons.person_rounded,
-                                  size: 15 * textScaleFactor,
-                                ),
-                              ),
-                              value: controller.salespersonFilter.value.isEmpty
-                                  ? null
-                                  : controller.salespersonFilter.value,
-                              items: [
-                                DropdownMenuItem(
-                                  value: '',
-                                  child: Text(
-                                    'All Salesmen',
-                                    style: TextStyle(
-                                      fontSize: 10 * textScaleFactor,
-                                    ),
+                  SizedBox(height: basePadding),
+                  // Filters Row
+                  SizedBox(
+                    height: 35 * (isPortrait ? 1.5 : 0.9),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          // Salesperson Filter
+                          Container(
+                            width: screenWidth * (isPortrait ? 0.55 : 0.3),
+                            margin: EdgeInsets.only(right: basePadding),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade300),
+                              color: Colors.white,
+                            ),
+                            child: Obx(
+                              () => DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  hintText: 'All Salesperson',
+                                  labelStyle: TextStyle(
+                                    fontSize: 10 * textScaleFactor,
+                                  ),
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: basePadding,
+                                    vertical: 8 * textScaleFactor,
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.person_rounded,
+                                    size: 15 * textScaleFactor,
                                   ),
                                 ),
-                                ...controller.availableSalespeople.map((
-                                  salesperson,
-                                ) {
-                                  return DropdownMenuItem(
-                                    value: salesperson,
+                                value:
+                                    controller.salespersonFilter.value.isEmpty
+                                    ? null
+                                    : controller.salespersonFilter.value,
+                                items: [
+                                  DropdownMenuItem(
+                                    value: '',
                                     child: Text(
-                                      salesperson,
-                                      overflow: TextOverflow.ellipsis,
+                                      'All Salesmen',
                                       style: TextStyle(
                                         fontSize: 10 * textScaleFactor,
                                       ),
                                     ),
-                                  );
-                                }).toList(),
-                              ],
-                              onChanged: controller.setSalespersonFilter,
-                              style: TextStyle(
-                                fontSize: 13 * textScaleFactor,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Status Filter
-                        Container(
-                          width: screenWidth * (isPortrait ? 0.52 : 0.25),
-                          margin: EdgeInsets.only(right: basePadding),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade300),
-                            color: Colors.white,
-                          ),
-                          child: Obx(
-                            () => DropdownButtonFormField<String>(
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                hintText: 'All Status',
-                                labelStyle: TextStyle(
-                                  fontSize: 10 * textScaleFactor,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: basePadding,
-                                  vertical: 8 * textScaleFactor,
-                                ),
-                                prefixIcon: Icon(
-                                  Icons.filter_list_rounded,
-                                  size: 15 * textScaleFactor,
-                                ),
-                              ),
-                              value: controller.statusFilter.value.isEmpty
-                                  ? null
-                                  : controller.statusFilter.value,
-                              items: ['All Status', 'WARM', 'COOL'].map((
-                                status,
-                              ) {
-                                return DropdownMenuItem(
-                                  value: status == 'All Status' ? '' : status,
-                                  child: Row(
-                                    children: [
-                                      if (status != 'All Status')
-                                        Container(
-                                          width: 12 * textScaleFactor,
-                                          height: 12 * textScaleFactor,
-                                          margin: EdgeInsets.only(
-                                            right: basePadding / 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: controller.getStatusColor(
-                                              status,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              6,
-                                            ),
-                                            border: Border.all(
-                                              color: controller
-                                                  .getStatusTextColor(status),
-                                              width: 1,
-                                            ),
-                                          ),
-                                        ),
-                                      Text(
-                                        status,
+                                  ),
+                                  ...controller.availableSalespeople.map((
+                                    salesperson,
+                                  ) {
+                                    return DropdownMenuItem(
+                                      value: salesperson,
+                                      child: Text(
+                                        salesperson,
+                                        overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                           fontSize: 10 * textScaleFactor,
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: controller.setStatusFilter,
-                              style: TextStyle(
-                                fontSize: 13 * textScaleFactor,
-                                color: Colors.black87,
+                                    );
+                                  }).toList(),
+                                ],
+                                onChanged: controller.setSalespersonFilter,
+                                style: TextStyle(
+                                  fontSize: 13 * textScaleFactor,
+                                  color: Colors.black87,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-
-                        Container(
-                          width: screenWidth * (isPortrait ? 0.43 : 0.2),
-                          margin: EdgeInsets.only(right: basePadding),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade300),
-                            color: Colors.white,
-                          ),
-                          child: Obx(
-                            () => DropdownButtonFormField<String>(
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                hintText: 'All Place',
-                                labelStyle: TextStyle(
-                                  fontSize: 10 * textScaleFactor,
+                          // Status Filter
+                          Container(
+                            width: screenWidth * (isPortrait ? 0.52 : 0.25),
+                            margin: EdgeInsets.only(right: basePadding),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade300),
+                              color: Colors.white,
+                            ),
+                            child: Obx(
+                              () => DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  hintText: 'All Status',
+                                  labelStyle: TextStyle(
+                                    fontSize: 10 * textScaleFactor,
+                                  ),
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: basePadding,
+                                    vertical: 8 * textScaleFactor,
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.filter_list_rounded,
+                                    size: 15 * textScaleFactor,
+                                  ),
                                 ),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: basePadding,
-                                  vertical: 8 * textScaleFactor,
-                                ),
-                                prefixIcon: Icon(
-                                  Icons.location_on_rounded,
-                                  size: 15 * textScaleFactor,
-                                ),
-                              ),
-
-                              // ✅ Safely set the current value
-                              value:
-                                  controller.availablePlaces.contains(
-                                    controller.placeFilter.value,
-                                  )
-                                  ? controller.placeFilter.value
-                                  : null,
-
-                              // ✅ Build dropdown items
-                              items: [
-                                const DropdownMenuItem(
-                                  value: '',
-                                  child: Text('All Places'),
-                                ),
-                                ...controller.availablePlaces.map((place) {
+                                value: controller.statusFilter.value.isEmpty
+                                    ? null
+                                    : controller.statusFilter.value,
+                                items: ['All Status', 'WARM', 'COOL'].map((
+                                  status,
+                                ) {
                                   return DropdownMenuItem(
-                                    value: place,
-                                    child: Text(
-                                      place,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 10 * textScaleFactor,
-                                      ),
+                                    value: status == 'All Status' ? '' : status,
+                                    child: Row(
+                                      children: [
+                                        if (status != 'All Status')
+                                          Container(
+                                            width: 12 * textScaleFactor,
+                                            height: 12 * textScaleFactor,
+                                            margin: EdgeInsets.only(
+                                              right: basePadding / 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: controller.getStatusColor(
+                                                status,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: controller
+                                                    .getStatusTextColor(status),
+                                                width: 1,
+                                              ),
+                                            ),
+                                          ),
+                                        Text(
+                                          status,
+                                          style: TextStyle(
+                                            fontSize: 10 * textScaleFactor,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   );
                                 }).toList(),
-                              ],
-
-                              // ✅ On change
-                              onChanged: controller.setPlaceFilter,
-
-                              style: TextStyle(
-                                fontSize: 13 * textScaleFactor,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        // Date Range Button
-                        SizedBox(
-                          width: screenWidth * (isPortrait ? 0.38 : 0.2),
-                          height: 58 * (isPortrait ? 1.0 : 0.9),
-                          child: ElevatedButton.icon(
-                            onPressed: () async {
-                              final picked = await showDateRangePicker(
-                                context: context,
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime(2030),
-                                builder: (context, child) {
-                                  return Theme(
-                                    data: Theme.of(context).copyWith(
-                                      colorScheme: ColorScheme.light(
-                                        primary: Colors.indigo.shade700,
-                                      ),
-                                    ),
-                                    child: child!,
-                                  );
-                                },
-                              );
-                              controller.setDateRange(picked);
-                            },
-                            icon: Icon(
-                              Icons.date_range_rounded,
-                              size: 18 * textScaleFactor,
-                            ),
-                            label: Obx(
-                              () => Text(
-                                controller.startDate.value != null
-                                    ? 'Date Selected'
-                                    : 'Select Date',
+                                onChanged: controller.setStatusFilter,
                                 style: TextStyle(
-                                  fontSize: 10 * textScaleFactor,
+                                  fontSize: 13 * textScaleFactor,
+                                  color: Colors.black87,
                                 ),
                               ),
                             ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.indigo.shade50,
-                              foregroundColor: Colors.indigo.shade700,
-                              elevation: 0,
-                              padding: EdgeInsets.symmetric(
-                                horizontal: basePadding,
-                                vertical: 8 * textScaleFactor,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                side: BorderSide(color: Colors.grey.shade300),
+                          ),
+
+                          Container(
+                            width: screenWidth * (isPortrait ? 0.43 : 0.2),
+                            margin: EdgeInsets.only(right: basePadding),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade300),
+                              color: Colors.white,
+                            ),
+                            child: Obx(
+                              () => DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  hintText: 'All Place',
+                                  labelStyle: TextStyle(
+                                    fontSize: 10 * textScaleFactor,
+                                  ),
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: basePadding,
+                                    vertical: 8 * textScaleFactor,
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.location_on_rounded,
+                                    size: 15 * textScaleFactor,
+                                  ),
+                                ),
+
+                                // ✅ Safely set the current value
+                                value:
+                                    controller.availablePlaces.contains(
+                                      controller.placeFilter.value,
+                                    )
+                                    ? controller.placeFilter.value
+                                    : null,
+
+                                // ✅ Build dropdown items
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: '',
+                                    child: Text('All Places'),
+                                  ),
+                                  ...controller.availablePlaces.map((place) {
+                                    return DropdownMenuItem(
+                                      value: place,
+                                      child: Text(
+                                        place,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 10 * textScaleFactor,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ],
+
+                                // ✅ On change
+                                onChanged: controller.setPlaceFilter,
+
+                                style: TextStyle(
+                                  fontSize: 13 * textScaleFactor,
+                                  color: Colors.black87,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        SizedBox(width: basePadding),
-                        // Clear Filters Button
-                        Obx(
-                          () =>
-                              (controller.statusFilter.value.isNotEmpty ||
-                                  controller.placeFilter.value.isNotEmpty ||
-                                  controller
-                                      .salespersonFilter
-                                      .value
-                                      .isNotEmpty ||
-                                  controller.startDate.value != null ||
-                                  controller.searchQuery.value.isNotEmpty)
-                              ? Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.shade50,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: Colors.red.shade200,
-                                    ),
+
+                          // Date Range Button
+                          SizedBox(
+                            width: screenWidth * (isPortrait ? 0.38 : 0.2),
+                            height: 58 * (isPortrait ? 1.0 : 0.9),
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                final picked = await showDateRangePicker(
+                                  context: context,
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2030),
+                                  builder: (context, child) {
+                                    return Theme(
+                                      data: Theme.of(context).copyWith(
+                                        colorScheme: ColorScheme.light(
+                                          primary: Colors.indigo.shade700,
+                                        ),
+                                      ),
+                                      child: child!,
+                                    );
+                                  },
+                                );
+                                controller.setDateRange(picked);
+                              },
+                              icon: Icon(
+                                Icons.date_range_rounded,
+                                size: 18 * textScaleFactor,
+                              ),
+                              label: Obx(
+                                () => Text(
+                                  controller.startDate.value != null
+                                      ? 'Date Selected'
+                                      : 'Select Date',
+                                  style: TextStyle(
+                                    fontSize: 10 * textScaleFactor,
                                   ),
-                                  child: IconButton(
-                                    onPressed: controller.clearFilters,
-                                    icon: Icon(
-                                      Icons.clear_all_rounded,
-                                      color: Colors.red.shade600,
-                                      size: 20 * textScaleFactor,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.indigo.shade50,
+                                foregroundColor: Colors.indigo.shade700,
+                                elevation: 0,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: basePadding,
+                                  vertical: 8 * textScaleFactor,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(color: Colors.grey.shade300),
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: basePadding),
+                          // Clear Filters Button
+                          Obx(
+                            () =>
+                                (controller.statusFilter.value.isNotEmpty ||
+                                    controller.placeFilter.value.isNotEmpty ||
+                                    controller
+                                        .salespersonFilter
+                                        .value
+                                        .isNotEmpty ||
+                                    controller.startDate.value != null ||
+                                    controller.searchQuery.value.isNotEmpty)
+                                ? Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.red.shade200,
+                                      ),
                                     ),
-                                    tooltip: 'Clear Filters',
-                                  ),
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                      ],
+                                    child: IconButton(
+                                      onPressed: controller.clearFilters,
+                                      icon: Icon(
+                                        Icons.clear_all_rounded,
+                                        color: Colors.red.shade600,
+                                        size: 20 * textScaleFactor,
+                                      ),
+                                      tooltip: 'Clear Filters',
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Stats Row
-          Obx(
-            () => Container(
-              height: summaryHeight * (isPortrait ? 1.9 : 1.5),
-              padding: EdgeInsets.symmetric(horizontal: basePadding),
-              color: Colors.white,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildStatCard(
-                    'Total',
-                    controller.filteredLeads.length.toString(),
-                    Colors.blue,
-                    context,
-                    baseFontSize,
-                  ),
-                  _buildStatCard(
-                    'Warm',
-                    controller.filteredLeads
-                        .where((lead) => lead['status'] == 'WARM')
-                        .length
-                        .toString(),
-                    Colors.orange,
-                    context,
-                    baseFontSize,
-                  ),
-                  _buildStatCard(
-                    'Cool',
-                    controller.filteredLeads
-                        .where((lead) => lead['status'] == 'COOL')
-                        .length
-                        .toString(),
-                    Colors.indigo,
-                    context,
-                    baseFontSize,
                   ),
                 ],
               ),
             ),
-          ),
-
-          Expanded(
-            child: Obx(() {
-              // 🔄 Show shimmer effect when loading (initial or filter)
-              if (controller.isLoading.value) {
-                return _buildShimmerList(context, visibleTiles, basePadding);
-              }
-
-              // ❌ No data found
-              if (controller.paginatedLeads.isEmpty &&
-                  !controller.isLoadingMore.value) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.search_off_rounded,
-                        size: screenWidth * 0.15,
-                        color: Colors.grey.shade400,
-                      ),
-                      SizedBox(height: screenHeight * 0.02),
-                      Text(
-                        'No leads found',
-                        style: TextStyle(
-                          fontSize: baseFontSize * 1.1,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              // ✅ Show lead list with pagination
-              return ListView.builder(
-                controller: controller.scrollController,
-                padding: EdgeInsets.all(basePadding),
-                itemCount:
-                    controller.paginatedLeads.length +
-                    (controller.isLoadingMore.value ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index < controller.paginatedLeads.length) {
-                    final lead = controller.paginatedLeads[index];
-                    return _buildLeadCard(
+            // Stats Row
+            Obx(
+              () => Container(
+                height: summaryHeight * (isPortrait ? 1.9 : 1.5),
+                padding: EdgeInsets.symmetric(horizontal: basePadding),
+                color: Colors.white,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildStatCard(
+                      'Total',
+                      controller.totalLeads.toString(),
+                      Colors.blue,
                       context,
-                      lead,
-                      controller,
-                      basePadding,
                       baseFontSize,
-                      textScaleFactor,
-                    );
-                  } else {
-                    // 🔽 Bottom pagination loader
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                },
-              );
-            }),
-          ),
-        ],
+                    ),
+                    _buildStatCard(
+                      'Warm',
+                      controller.warmLeads.toString(),
+                      Colors.orange,
+                      context,
+                      baseFontSize,
+                    ),
+                    _buildStatCard(
+                      'Cool',
+                      controller.coolLeads.toString(),
+                      Colors.indigo,
+                      context,
+                      baseFontSize,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            Expanded(
+              child: Obx(() {
+                // 🔄 Show shimmer effect when loading (initial or filter)
+                if (controller.isLoading.value) {
+                  return _buildShimmerList(context, visibleTiles, basePadding);
+                }
+
+                // ❌ No data found
+                if (controller.paginatedLeads.isEmpty &&
+                    !controller.isLoadingMore.value) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.search_off_rounded,
+                          size: screenWidth * 0.15,
+                          color: Colors.grey.shade400,
+                        ),
+                        SizedBox(height: screenHeight * 0.02),
+                        Text(
+                          'No leads found',
+                          style: TextStyle(
+                            fontSize: baseFontSize * 1.1,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // ✅ Show lead list with pagination
+                return ListView.builder(
+                  controller: controller.scrollController,
+                  padding: EdgeInsets.all(basePadding),
+                  itemCount:
+                      controller.paginatedLeads.length +
+                      (controller.isLoadingMore.value ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index < controller.paginatedLeads.length) {
+                      final lead = controller.paginatedLeads[index];
+                      return _buildLeadCard(
+                        context,
+                        lead,
+                        controller,
+                        basePadding,
+                        baseFontSize,
+                        textScaleFactor,
+                      );
+                    } else {
+                      // 🔽 Bottom pagination loader
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16.0),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                  },
+                );
+              }),
+            ),
+          ],
+        ),
       ),
     );
   }

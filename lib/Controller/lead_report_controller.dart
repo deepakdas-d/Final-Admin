@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 import 'dart:io';
 import 'package:admin/home.dart';
@@ -5,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
@@ -19,12 +21,8 @@ class LeadReportController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String docId = '';
   // Observable variables
-  final RxList<Map<String, dynamic>> allLeads = <Map<String, dynamic>>[].obs;
-  final RxList<Map<String, dynamic>> filteredLeads =
-      <Map<String, dynamic>>[].obs;
   final RxList<Map<String, dynamic>> paginatedLeads =
       <Map<String, dynamic>>[].obs;
-
   final RxString statusFilter = ''.obs;
   final RxString placeFilter = ''.obs;
   final RxString salespersonFilter = ''.obs;
@@ -37,6 +35,11 @@ class LeadReportController extends GetxController {
   final RxBool isLoadingMore = false.obs;
   final RxBool hasMoreData = true.obs;
 
+  // Stats
+  final RxInt totalLeads = 0.obs;
+  final RxInt warmLeads = 0.obs;
+  final RxInt coolLeads = 0.obs;
+
   // Filter options
   final RxList<String> availablePlaces = <String>[].obs;
   final RxList<String> availableSalespeople = <String>[].obs;
@@ -47,18 +50,14 @@ class LeadReportController extends GetxController {
   DocumentSnapshot? _lastDocument;
   final ScrollController scrollController = ScrollController();
 
+  Timer? _searchDebounce;
+
   @override
   void onInit() {
     super.onInit();
-    fetchLeads();
     fetchAllSalespeople();
-
-    // Listen to search query changes with debounce
-    debounce(
-      searchQuery,
-      (_) => filterLeads(),
-      time: const Duration(milliseconds: 500),
-    );
+    fetchAllPlaces(); // New method to fetch unique places
+    fetchLeads(isRefresh: true); // Initial load with refresh
 
     // Add scroll listener for infinite scrolling
     scrollController.addListener(_scrollListener);
@@ -66,6 +65,7 @@ class LeadReportController extends GetxController {
 
   @override
   void onClose() {
+    _searchDebounce?.cancel();
     scrollController.dispose();
     searchController.dispose();
     super.onClose();
@@ -75,7 +75,9 @@ class LeadReportController extends GetxController {
     if (scrollController.position.pixels >=
             scrollController.position.maxScrollExtent - 200 &&
         !isLoadingMore.value &&
-        hasMoreData.value) {
+        hasMoreData.value &&
+        scrollController.position.userScrollDirection ==
+            ScrollDirection.forward) {
       fetchMoreLeads();
     }
   }
@@ -121,25 +123,82 @@ class LeadReportController extends GetxController {
     }
   }
 
+  Future<void> fetchAllPlaces() async {
+    try {
+      final leadsSnapshot = await _firestore.collection('Leads').get();
+      final Set<String> placesSet = leadsSnapshot.docs
+          .map((doc) => doc['place']?.toString().trim() ?? '')
+          .where((place) => place.isNotEmpty)
+          .toSet();
+
+      availablePlaces.assignAll(placesSet.toList()..sort());
+    } catch (e) {
+      log('Error fetching places: $e');
+    }
+  }
+
   Future<void> fetchLeads({bool isRefresh = false}) async {
     try {
       if (isRefresh) {
         _lastDocument = null;
-        allLeads.clear();
-        filteredLeads.clear();
         paginatedLeads.clear();
         hasMoreData.value = true;
         isDataLoaded.value = false;
+        isLoading.value = true;
+      } else {
+        isLoadingMore.value = true;
       }
-
-      isLoading.value = true;
 
       Query<Map<String, dynamic>> query = _firestore
           .collection('Leads')
           .orderBy('createdAt', descending: true)
           .limit(itemsPerPage);
 
-      if (_lastDocument != null) {
+      // Apply server-side filters
+      if (statusFilter.value.isNotEmpty && statusFilter.value != 'All') {
+        query = query.where('status', isEqualTo: statusFilter.value);
+      }
+
+      if (placeFilter.value.isNotEmpty && placeFilter.value != 'All') {
+        query = query.where('place', isEqualTo: placeFilter.value);
+      }
+
+      if (salespersonFilter.value.isNotEmpty &&
+          salespersonFilter.value != 'All') {
+        final salesmen = await _firestore
+            .collection('users')
+            .where('name', isEqualTo: salespersonFilter.value)
+            .get();
+
+        if (salesmen.docs.isNotEmpty) {
+          final id = salesmen.docs.first.id;
+          query = query.where('salesmanID', isEqualTo: id);
+        } else {
+          paginatedLeads.clear();
+          hasMoreData.value = false;
+          isLoading.value = false;
+          isLoadingMore.value = false;
+          isDataLoaded.value = true;
+          return;
+        }
+      }
+
+      if (startDate.value != null) {
+        query = query.where(
+          'createdAt',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startDate.value!),
+        );
+      }
+
+      if (endDate.value != null) {
+        final inclusiveEnd = endDate.value!.add(const Duration(days: 1));
+        query = query.where(
+          'createdAt',
+          isLessThan: Timestamp.fromDate(inclusiveEnd),
+        );
+      }
+
+      if (_lastDocument != null && !isRefresh) {
         query = query.startAfterDocument(_lastDocument!);
       }
 
@@ -147,13 +206,11 @@ class LeadReportController extends GetxController {
 
       if (leadSnapshot.docs.isEmpty) {
         hasMoreData.value = false;
-        isLoading.value = false;
         isDataLoaded.value = true;
         return;
       }
 
       List<Map<String, dynamic>> tempLeads = [];
-      Set<String> placesSet = {};
       Set<String> salesmanIDs = {};
 
       // Collect all salesmanIDs
@@ -184,8 +241,7 @@ class LeadReportController extends GetxController {
         final String docId = doc.id;
         final salesmanID = data['salesmanID'];
         final salesmanName = salesmanIdToName[salesmanID] ?? 'Unknown';
-        log("document id is $docId");
-        tempLeads.add({
+        final lead = {
           'docId': docId,
           'address': data['address'] ?? '',
           'createdAt':
@@ -204,21 +260,30 @@ class LeadReportController extends GetxController {
           'salesman': salesmanName,
           'status': data['status'] ?? '',
           'customerId': data['customerId'],
-        });
+        };
 
-        final place = data['place']?.toString().trim();
-        if (place != null && place.isNotEmpty) {
-          placesSet.add(place);
+        // Apply client-side search filter
+        if (searchQuery.value.isNotEmpty) {
+          final queryLower = searchQuery.value.toLowerCase();
+          if (!lead['name'].toString().toLowerCase().contains(queryLower) &&
+              !lead['leadId'].toString().toLowerCase().contains(queryLower) &&
+              !lead['phone1'].toString().toLowerCase().contains(queryLower) &&
+              !lead['salesman'].toString().toLowerCase().contains(queryLower) &&
+              !lead['place'].toString().toLowerCase().contains(queryLower)) {
+            continue;
+          }
         }
+
+        tempLeads.add(lead);
       }
 
       _lastDocument = leadSnapshot.docs.last;
-      allLeads.addAll(tempLeads);
-      availablePlaces.value = placesSet.toList()..sort();
-
-      // Update filteredLeads and paginatedLeads only after all data is processed
-      await filterLeads();
+      paginatedLeads.addAll(tempLeads);
+      hasMoreData.value = leadSnapshot.docs.length == itemsPerPage;
       isDataLoaded.value = true;
+
+      // Update stats
+      await fetchStats();
     } catch (e) {
       Get.snackbar(
         'Error',
@@ -228,38 +293,28 @@ class LeadReportController extends GetxController {
         colorText: Colors.white,
       );
     } finally {
-      // Ensure minimum shimmer duration for better UX
       await Future.delayed(const Duration(milliseconds: 500));
       isLoading.value = false;
+      isLoadingMore.value = false;
     }
   }
 
   Future<void> fetchMoreLeads() async {
     if (!hasMoreData.value || isLoadingMore.value) return;
 
-    try {
-      isLoadingMore.value = true;
-      await fetchLeads();
-    } finally {
-      isLoadingMore.value = false;
-    }
+    await fetchLeads(isRefresh: false);
   }
 
-  Future<void> filterLeads() async {
+  Future<void> fetchStats() async {
     try {
-      isLoading.value = true;
-      filteredLeads.clear();
-      paginatedLeads.clear();
+      Query<Map<String, dynamic>> baseQuery = _firestore.collection('Leads');
 
-      Query<Map<String, dynamic>> query = _firestore.collection('Leads');
-
-      // Apply Firestore-supported filters
       if (statusFilter.value.isNotEmpty && statusFilter.value != 'All') {
-        query = query.where('status', isEqualTo: statusFilter.value);
+        baseQuery = baseQuery.where('status', isEqualTo: statusFilter.value);
       }
 
       if (placeFilter.value.isNotEmpty && placeFilter.value != 'All') {
-        query = query.where('place', isEqualTo: placeFilter.value);
+        baseQuery = baseQuery.where('place', isEqualTo: placeFilter.value);
       }
 
       if (salespersonFilter.value.isNotEmpty &&
@@ -271,87 +326,44 @@ class LeadReportController extends GetxController {
 
         if (salesmen.docs.isNotEmpty) {
           final id = salesmen.docs.first.id;
-          query = query.where('salesmanID', isEqualTo: id);
-        } else {
-          filteredLeads.clear();
-          paginatedLeads.clear();
-          isLoading.value = false;
-          return;
+          baseQuery = baseQuery.where('salesmanID', isEqualTo: id);
         }
       }
 
       if (startDate.value != null) {
-        query = query.where(
+        baseQuery = baseQuery.where(
           'createdAt',
-          isGreaterThanOrEqualTo: startDate.value,
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startDate.value!),
         );
       }
 
       if (endDate.value != null) {
         final inclusiveEnd = endDate.value!.add(const Duration(days: 1));
-        query = query.where('createdAt', isLessThan: inclusiveEnd);
+        baseQuery = baseQuery.where(
+          'createdAt',
+          isLessThan: Timestamp.fromDate(inclusiveEnd),
+        );
       }
 
-      // Run query
-      final snapshot = await query.orderBy('createdAt', descending: true).get();
+      // Total count (ignoring search, as it's client-side)
+      final totalSnapshot = await baseQuery.count().get();
+      totalLeads.value = totalSnapshot.count ?? 0;
 
-      final List<Map<String, dynamic>> tempLeads = [];
+      // Warm count
+      final warmSnapshot = await baseQuery
+          .where('status', isEqualTo: 'WARM')
+          .count()
+          .get();
+      warmLeads.value = warmSnapshot.count ?? 0;
 
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final salesmanName = await getSalesmanName(data['salesmanID']);
-
-        final lead = {
-          'docId': doc.id,
-          'address': data['address'] ?? '',
-          'createdAt':
-              (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-          'followUpDate': (data['followUpDate'] as Timestamp?)?.toDate(),
-          'isArchived': data['isArchived'] ?? false,
-          'leadId': data['leadId'] ?? '',
-          'name': data['name'] ?? '',
-          'nos': data['nos'] ?? '',
-          'phone1': data['phone1'] ?? '',
-          'phone2': data['phone2'] ?? '',
-          'place': data['place'] ?? '',
-          'productID': data['productID'] ?? '',
-          'remark': data['remark'] ?? '',
-          'salesman': salesmanName,
-          'status': data['status'] ?? '',
-          'customerId': data['customerId'],
-        };
-
-        tempLeads.add(lead);
-      }
-
-      filteredLeads.assignAll(tempLeads);
-
-      // Apply client-side search filter (if needed)
-      if (searchQuery.value.isNotEmpty) {
-        final query = searchQuery.value.toLowerCase();
-        filteredLeads.value = filteredLeads.where((lead) {
-          return lead['name'].toString().toLowerCase().contains(query) ||
-              lead['leadId'].toString().toLowerCase().contains(query) ||
-              lead['phone1'].toString().toLowerCase().contains(query) ||
-              lead['salesman'].toString().toLowerCase().contains(query) ||
-              lead['place'].toString().toLowerCase().contains(query);
-        }).toList();
-      }
-
-      // Update paginatedLeads only after filtering is complete
-      paginatedLeads.assignAll(filteredLeads.take(itemsPerPage).toList());
+      // Cool count
+      final coolSnapshot = await baseQuery
+          .where('status', isEqualTo: 'COOL')
+          .count()
+          .get();
+      coolLeads.value = coolSnapshot.count ?? 0;
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Failed to fetch filtered leads: $e',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    } finally {
-      // Ensure minimum shimmer duration for better UX
-      await Future.delayed(const Duration(milliseconds: 500));
-      isLoading.value = false;
+      log('Error fetching stats: $e');
     }
   }
 
@@ -387,7 +399,14 @@ class LeadReportController extends GetxController {
     fetchLeads(isRefresh: true);
   }
 
-  // Rest of the methods (unchanged)
+  void onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 500), () {
+      searchQuery.value = value;
+      fetchLeads(isRefresh: true);
+    });
+  }
+
   Future<List<Map<String, dynamic>>> _getFilteredLeadsDataForReport() async {
     try {
       Query<Map<String, dynamic>> query = _firestore
@@ -461,6 +480,7 @@ class LeadReportController extends GetxController {
         }
 
         fullLeadsData.add({
+          'docId': doc.id,
           'address': data['address'] ?? '',
           'createdAt':
               (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),

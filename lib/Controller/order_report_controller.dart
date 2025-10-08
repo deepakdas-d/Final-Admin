@@ -496,6 +496,7 @@ class OrderReportController extends GetxController {
         }
 
         fullOrdersData.add({
+          'docId': doc.id,
           'address': data['address'] ?? '',
           'createdAt':
               (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
