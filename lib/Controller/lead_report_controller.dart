@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'dart:io';
+import 'package:admin/home.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:excel/excel.dart';
@@ -16,7 +17,7 @@ import 'package:share_plus/share_plus.dart';
 // Controller
 class LeadReportController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
+  final String docId = '';
   // Observable variables
   final RxList<Map<String, dynamic>> allLeads = <Map<String, dynamic>>[].obs;
   final RxList<Map<String, dynamic>> filteredLeads =
@@ -180,10 +181,12 @@ class LeadReportController extends GetxController {
       // Process leads
       for (var doc in leadSnapshot.docs) {
         final data = doc.data();
+        final String docId = doc.id;
         final salesmanID = data['salesmanID'];
         final salesmanName = salesmanIdToName[salesmanID] ?? 'Unknown';
-
+        log("document id is $docId");
         tempLeads.add({
+          'docId': docId,
           'address': data['address'] ?? '',
           'createdAt':
               (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -299,6 +302,7 @@ class LeadReportController extends GetxController {
         final salesmanName = await getSalesmanName(data['salesmanID']);
 
         final lead = {
+          'docId': doc.id,
           'address': data['address'] ?? '',
           'createdAt':
               (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -1223,6 +1227,34 @@ class LeadReportController extends GetxController {
       );
     } finally {
       isExporting.value = false;
+    }
+  }
+
+  Future<void> deleteLeads(String docId, {BuildContext? context}) async {
+    try {
+      await _firestore.collection('Leads').doc(docId).delete();
+
+      // ✅ Refresh Firestore list
+      await fetchLeads(isRefresh: true);
+
+      Get.snackbar(
+        'Deleted!',
+        'Lead deleted successfully.',
+        backgroundColor: Colors.white,
+        colorText: Colors.green,
+      );
+
+      // ✅ Navigate back to the Orders list page
+      Get.offAll(
+        Dashboard(),
+      ); // <-- Replace with your actual Orders screen widget
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to delete Lead: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     }
   }
 

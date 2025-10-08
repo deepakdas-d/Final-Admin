@@ -1,5 +1,3 @@
-
-
 import 'package:admin/Controller/lead_report_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -62,13 +60,63 @@ class LeadDetailPage extends StatelessWidget {
         foregroundColor: _textColor, // Icons and text use the main text color
         elevation: 2, // Subtle shadow for app bar
         leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back,
-            size: 20,
-          ), // Modern back icon
+          icon: const Icon(Icons.arrow_back, size: 20), // Modern back icon
           onPressed: () => Navigator.of(context).pop(),
           color: _textColor, // Icon color matches text
         ),
+        actions: [
+          TextButton.icon(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Confirm Delete'),
+                  content: const Text(
+                    'Are you sure you want to delete this Lead?',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm == true) {
+                // 🔹 Show full-screen loader
+                Get.dialog(
+                  const Center(
+                    child: CircularProgressIndicator(color: Colors.red),
+                  ),
+                  barrierDismissible: false,
+                );
+
+                try {
+                  await controller.deleteLeads(lead['docId'], context: context);
+                } finally {
+                  // 🔹 Hide loader
+                  if (Get.isDialogOpen ?? false) Get.back();
+                }
+              }
+            },
+            label: Text(
+              "Delete",
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),

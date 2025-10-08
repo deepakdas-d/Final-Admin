@@ -512,41 +512,51 @@ class LostReportController extends GetxController {
   }
 
   Future<bool> checkStoragePermission() async {
-    if (!Platform.isAndroid) return true;
-
-    final androidInfo = await DeviceInfoPlugin().androidInfo;
-    final sdkInt = androidInfo.version.sdkInt;
-
-    if (sdkInt >= 30) {
-      final status = await Permission.manageExternalStorage.request();
-      if (status.isGranted) return true;
-    } else {
-      final status = await Permission.storage.request();
-      if (status.isGranted) return true;
+    if (Platform.isIOS) {
+      // iOS doesn't require storage permission for app-specific directories
+      return true;
     }
 
-    Get.snackbar(
-      'Permission Required',
-      'Storage permission required. Please enable it in settings.',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: Colors.orange,
-      colorText: Colors.white,
-      mainButton: TextButton(
-        onPressed: openAppSettings,
-        child: const Text(
-          'Open Settings',
-          style: TextStyle(color: Colors.white),
-        ),
-      ),
-    );
+    if (Platform.isAndroid) {
+      final androidInfo = await DeviceInfoPlugin().androidInfo;
+      final sdkInt = androidInfo.version.sdkInt;
+
+      // Android 13+ (API 33+): No permission needed for Downloads directory
+      if (sdkInt >= 33) {
+        return true;
+      }
+
+      // Android 11-12 (API 30-32) or Android 10 and below
+      final status = await Permission.storage.request();
+
+      if (status.isGranted) return true;
+
+      if (status.isDenied || status.isPermanentlyDenied) {
+        Get.snackbar(
+          'Permission Required',
+          'Storage permission is required to save files. Please enable it in settings.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          mainButton: TextButton(
+            onPressed: openAppSettings,
+            child: const Text(
+              'Open Settings',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        );
+        return false;
+      }
+    }
 
     return false;
   }
 
   /// Generates an Excel file containing all lead data (based on current filters).
-  /// Generates an Excel file containing all lead data (based on current filters).
   Future<File> _generateLeadsExcelFile(
     List<Map<String, dynamic>> leadsData,
+    String filePath, // Added filePath parameter
   ) async {
     final excel = Excel.createExcel();
     final Sheet sheet = excel['All Leads Data'];
@@ -710,11 +720,8 @@ class LostReportController extends GetxController {
     );
     timestampCell.cellStyle = CellStyle(italic: true, fontSize: 10);
 
-    final outputDir = await getTemporaryDirectory();
-    final file = File(
-      '${outputDir.path}/lead_report_${DateTime.now().millisecondsSinceEpoch}.xlsx',
-    );
-
+    // Save the file to the specified filePath
+    final file = File(filePath);
     final bytes = excel.encode();
     if (bytes != null) {
       await file.writeAsBytes(bytes);
@@ -732,9 +739,9 @@ class LostReportController extends GetxController {
   ) async {
     if (isExporting.value) return;
 
-    salespersonFilter.value = salesmanName; // Set the filter for the salesman
+    salespersonFilter.value = salesmanName;
     await downloadAllLeadsDataAsPDF(context);
-    salespersonFilter.value = ''; // Reset the filter after download
+    salespersonFilter.value = ''; // Reset filter
   }
 
   /// Downloads data for a single salesman as an Excel file
@@ -744,13 +751,13 @@ class LostReportController extends GetxController {
   ) async {
     if (isExporting.value) return;
 
-    salespersonFilter.value = salesmanName; // Set the filter for the salesman
+    salespersonFilter.value = salesmanName;
     await downloadAllLeadsDataAsExcel(context);
-    salespersonFilter.value = ''; // Reset the filter after download
+    salespersonFilter.value = ''; // Reset filter
   }
 
   /// Downloads all lead data as a PDF document (based on current filters).
-  /// Downloads all lead data as a PDF document (based on current filters).
+
   Future<void> downloadAllLeadsDataAsPDF(BuildContext context) async {
     if (isExporting.value) return;
 
@@ -793,7 +800,6 @@ class LostReportController extends GetxController {
       final pdf = pw.Document();
       final dateFormat = DateFormat('dd-MMM-yyyy HH:mm');
 
-      // Build filter description
       final filterDescription = [
         if (salespersonFilter.value.isNotEmpty &&
             salespersonFilter.value != 'All')
@@ -904,17 +910,43 @@ class LostReportController extends GetxController {
         ),
       );
 
-      final outputDir = await getApplicationDocumentsDirectory();
-      final fileName =
-          'lead_report_${DateTime.now().millisecondsSinceEpoch}.pdf';
-      final file = File('${outputDir.path}/$fileName');
-      await file.writeAsBytes(await pdf.save());
+      Directory? directory;
+      bool dirDownloadExists = true;
 
+      if (Platform.isIOS) {
+        directory = await getApplicationDocumentsDirectory();
+        log("📂 iOS documents directory: ${directory.path}");
+      } else {
+        // Try /Download
+        String path1 = "/storage/emulated/0/Download";
+        // Fallback /Downloads
+        String path2 = "/storage/emulated/0/Downloads";
+
+        dirDownloadExists = await Directory(path1).exists();
+        if (dirDownloadExists) {
+          directory = Directory(path1);
+          log("📂 Using path: $path1");
+        } else {
+          directory = Directory(path2);
+          log("📂 Using fallback path: $path2");
+        }
+      }
+
+      // ✅ Create Employee subfolder
+      final employeeDir = Directory('${directory.path}/Employee');
+      await employeeDir.create(recursive: true);
+      log("📂 Employee folder ready at: ${employeeDir.path}");
+
+      // Save PDF
+      final fileName = 'Leads_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = File('${employeeDir.path}/$fileName');
+      await file.writeAsBytes(await pdf.save());
+      log("✅ PDF saved at: ${file.path}");
       if (context.mounted) Navigator.of(context).pop();
 
       Get.snackbar(
         'PDF Generated',
-        'PDF report saved to ${file.path.split('/').last}',
+        'PDF file saved to ${file.path}',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.green,
         colorText: Colors.white,
@@ -986,6 +1018,18 @@ class LostReportController extends GetxController {
       final pdf = pw.Document();
       final dateFormat = DateFormat('dd-MMM-yyyy HH:mm');
 
+      final filterDescription = [
+        if (salespersonFilter.value.isNotEmpty &&
+            salespersonFilter.value != 'All')
+          'Salesperson: ${salespersonFilter.value}',
+        if (statusFilter.value.isNotEmpty && statusFilter.value != 'All')
+          'Status: ${statusFilter.value}',
+        if (placeFilter.value.isNotEmpty && placeFilter.value != 'All')
+          'Place: ${placeFilter.value}',
+        if (startDate.value != null && endDate.value != null)
+          'Date Range: ${dateFormat.format(startDate.value!)} to ${dateFormat.format(endDate.value!)}',
+      ].join(' | ');
+
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4.landscape.copyWith(
@@ -1005,6 +1049,16 @@ class LostReportController extends GetxController {
                   ),
                 ),
               ),
+              if (filterDescription.isNotEmpty) ...[
+                pw.SizedBox(height: 10),
+                pw.Text(
+                  'Filters: $filterDescription',
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    fontStyle: pw.FontStyle.italic,
+                  ),
+                ),
+              ],
               pw.SizedBox(height: 20),
               pw.Table.fromTextArray(
                 headers: [
@@ -1042,18 +1096,17 @@ class LostReportController extends GetxController {
                 cellAlignment: pw.Alignment.centerLeft,
                 cellPadding: const pw.EdgeInsets.all(5),
                 cellStyle: pw.TextStyle(fontSize: 9),
-                cellHeight: 30, // Fixed height for cells to ensure readability
+                cellHeight: 30,
                 columnWidths: {
-                  0: const pw.FlexColumnWidth(1.5), // Lead ID
-                  1: const pw.FlexColumnWidth(2.5), // Name
-                  2: const pw.FlexColumnWidth(1.5), // Phone1
-                  3: const pw.FlexColumnWidth(1.5), // Phone2
-                  4: const pw.FlexColumnWidth(2), // Place
-                  5: const pw.FlexColumnWidth(2), // Salesman
-                  6: const pw.FlexColumnWidth(1.2), // Status
-                  7: const pw.FlexColumnWidth(2), // Created At
+                  0: const pw.FlexColumnWidth(1.5),
+                  1: const pw.FlexColumnWidth(2.5),
+                  2: const pw.FlexColumnWidth(1.5),
+                  3: const pw.FlexColumnWidth(1.5),
+                  4: const pw.FlexColumnWidth(2),
+                  5: const pw.FlexColumnWidth(2),
+                  6: const pw.FlexColumnWidth(1.2),
+                  7: const pw.FlexColumnWidth(2),
                 },
-                // Enable text wrapping for long content
               ),
               pw.SizedBox(height: 20),
               pw.Text(
@@ -1075,9 +1128,9 @@ class LostReportController extends GetxController {
         ),
       );
 
+      // Use temporary directory for sharing
       final outputDir = await getTemporaryDirectory();
-      final fileName =
-          'lead_report_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final fileName = 'Leads_${DateTime.now().millisecondsSinceEpoch}.pdf';
       final file = File('${outputDir.path}/$fileName');
       await file.writeAsBytes(await pdf.save());
 
@@ -1112,7 +1165,7 @@ class LostReportController extends GetxController {
     }
   }
 
-  /// Downloads all lead data as an Excel file (based on current filters).
+  /// Downloads all lead data as an Excel file to phone storage.
   Future<void> downloadAllLeadsDataAsExcel(BuildContext context) async {
     if (isExporting.value) return;
 
@@ -1152,7 +1205,25 @@ class LostReportController extends GetxController {
         return;
       }
 
-      final file = await _generateLeadsExcelFile(leadsData);
+      // Get the appropriate directory for saving the file
+      Directory? directory;
+      if (Platform.isAndroid) {
+        directory = await getDownloadsDirectory();
+      } else if (Platform.isIOS) {
+        directory = await getApplicationDocumentsDirectory();
+      }
+
+      if (directory == null) {
+        throw Exception('Unable to access storage directory');
+      }
+
+      await directory.create(recursive: true);
+      final String fileName =
+          'Leads_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final String filePath = '${directory.path}/$fileName';
+
+      final file = await _generateLeadsExcelFile(leadsData, filePath);
+
       if (context.mounted) Navigator.of(context).pop();
 
       Get.snackbar(
@@ -1226,7 +1297,13 @@ class LostReportController extends GetxController {
         return;
       }
 
-      final file = await _generateLeadsExcelFile(leadsData);
+      // Use temporary directory for sharing to avoid cluttering Downloads
+      final outputDir = await getApplicationDocumentsDirectory();
+      final fileName = 'Leads_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final filePath = '${outputDir.path}/$fileName';
+
+      final file = await _generateLeadsExcelFile(leadsData, filePath);
+
       if (context.mounted) Navigator.of(context).pop();
 
       await Share.shareXFiles(
@@ -1236,13 +1313,13 @@ class LostReportController extends GetxController {
             'Lead Data Export - ${DateFormat('dd-MMM-yyyy').format(DateTime.now().toLocal())}',
       );
 
-      // Get.snackbar(
-      //   'Share Initiated',
-      //   'Excel file prepared for sharing.',
-      //   snackPosition: SnackPosition.BOTTOM,
-      //   backgroundColor: Colors.green,
-      //   colorText: Colors.white,
-      // );
+      Get.snackbar(
+        'Share Initiated',
+        'Excel file prepared for sharing.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
     } catch (e) {
       if (context.mounted) Navigator.of(context).pop();
       log('Error sharing Excel: $e');

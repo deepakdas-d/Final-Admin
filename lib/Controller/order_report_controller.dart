@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'dart:io';
+import 'package:admin/home.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:excel/excel.dart';
@@ -15,6 +16,7 @@ import 'package:share_plus/share_plus.dart';
 
 class OrderReportController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final String docId = '';
 
   // Observable variables
   final RxList<Map<String, dynamic>> allLeads = <Map<String, dynamic>>[].obs;
@@ -185,12 +187,14 @@ class OrderReportController extends GetxController {
 
       for (var doc in orderSnapshot.docs) {
         final data = doc.data();
+        final String docId = doc.id;
         final String? salesmanID = data['salesmanID'];
         final String salesmanName = await getSalesmanName(salesmanID);
         final String? makerID = data['makerId'];
         final String maker = await getMakerName(makerID);
-
+        log("doc id is $docId");
         tempOrders.add({
+          'docId': docId,
           'address': data['address'] ?? '',
           'createdAt':
               (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -1427,6 +1431,35 @@ class OrderReportController extends GetxController {
       );
     } finally {
       isExporting.value = false;
+    }
+  }
+
+  //Delete Order Individually
+  Future<void> deleteOrder(String docId, {BuildContext? context}) async {
+    try {
+      await _firestore.collection('Orders').doc(docId).delete();
+
+      // ✅ Refresh Firestore list
+      await fetchOrders(isRefresh: true);
+
+      Get.snackbar(
+        'Deleted!',
+        'Order deleted successfully.',
+        backgroundColor: Colors.white,
+        colorText: Colors.green,
+      );
+
+      // ✅ Navigate back to the Orders list page
+      Get.offAll(
+        Dashboard(),
+      ); // <-- Replace with your actual Orders screen widget
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to delete order: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     }
   }
 

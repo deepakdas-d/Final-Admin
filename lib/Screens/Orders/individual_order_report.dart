@@ -76,6 +76,62 @@ class IndividualOrderReportPage extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
           color: _textColor, // Icon color matches text
         ),
+        actions: [
+          TextButton.icon(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Confirm Delete'),
+                  content: const Text(
+                    'Are you sure you want to delete this order?',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm == true) {
+                // 🔹 Show full-screen loader
+                Get.dialog(
+                  const Center(
+                    child: CircularProgressIndicator(color: Colors.red),
+                  ),
+                  barrierDismissible: false,
+                );
+
+                try {
+                  await controller.deleteOrder(
+                    order['docId'],
+                    context: context,
+                  );
+                } finally {
+                  // 🔹 Hide loader
+                  if (Get.isDialogOpen ?? false) Get.back();
+                }
+              }
+            },
+            label: Text(
+              "Delete",
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
